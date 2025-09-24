@@ -186,5 +186,9 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Công cụ tạo file giá") as de
     output_choice_radio.change(fn=toggle_gsheet_url_visibility, inputs=output_choice_radio, outputs=[google_sheet_url_input, sheet_name_input])
     process_button.click(fn=process_data, inputs=[shop_id_input, file_input, font_name_dropdown, font_size_slider, output_choice_radio, google_sheet_url_input, sheet_name_input], outputs=[status_output, file_output])
 
-# Khởi chạy app
-demo.launch()
+# === PHẦN SỬA LỖI CHO RENDER ===
+# Đọc PORT từ biến môi trường của Render, nếu không có thì mặc định dùng 7860
+port = int(os.getenv('PORT', 7860))
+
+# Khởi chạy app với host và port được Render chỉ định
+demo.launch(server_name="0.0.0.0", server_port=port)
