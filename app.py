@@ -15,15 +15,14 @@ from gspread.exceptions import WorksheetNotFound
 from gspread_dataframe import set_with_dataframe
 from google.oauth2.service_account import Credentials
 
-# --- HÀM KIỂM TRA SHEET TRỐNG THÔNG MINH HƠN ---
+# --- HÀM KIỂM TRA SHEET TRỐNG THÔNG MINH ---
 def is_sheet_truly_empty(data):
     """Kiểm tra xem sheet có thực sự trống không (kể cả các hàng trống)."""
-    if not data:  # Trường hợp sheet không có hàng nào
+    if not data:
         return True
-    # Kiểm tra xem tất cả các ô trong tất cả các hàng có trống không
     return all(all(cell == '' for cell in row) for row in data)
 
-# --- HÀM TẢI LÊN GOOGLE SHEET ĐÃ SỬA LỖI ---
+# --- HÀM TẢI LÊN GOOGLE SHEET VỚI LOGIC MỚI ---
 def upload_to_google_sheet(df, sheet_url, sheet_name, progress):
     try:
         progress(0.9, desc="Đang kết nối tới Google Sheets...")
@@ -35,41 +34,71 @@ def upload_to_google_sheet(df, sheet_url, sheet_name, progress):
         creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
         client = gspread.authorize(creds)
         spreadsheet = client.open_by_url(sheet_url)
+        
+        target_worksheet = None
+        final_sheet_name = ""
 
-        if not sheet_name:
-            sheet_name = "Sheet1"
-        is_new_sheet = False
-        try:
-            worksheet = spreadsheet.worksheet(sheet_name)
-            progress(0.92, desc=f"Đã tìm thấy sheet '{sheet_name}'.")
-        except WorksheetNotFound:
-            progress(0.92, desc=f"Không tìm thấy sheet '{sheet_name}'. Đang tạo sheet mới...")
-            worksheet = spreadsheet.add_worksheet(title=sheet_name, rows="1", cols="20")
-            is_new_sheet = True
+        # === LOGIC MỚI BẮT ĐẦU ===
+        if sheet_name:  # Trường hợp 1: Người dùng nhập tên sheet cụ thể
+            final_sheet_name = sheet_name
+            try:
+                target_worksheet = spreadsheet.worksheet(final_sheet_name)
+                progress(0.92, desc=f"Đã tìm thấy sheet '{final_sheet_name}'.")
+            except WorksheetNotFound:
+                progress(0.92, desc=f"Không tìm thấy sheet '{final_sheet_name}', đang tạo mới...")
+                target_worksheet = spreadsheet.add_worksheet(title=final_sheet_name, rows="1", cols="20")
+        else:  # Trường hợp 2: Người dùng không nhập tên sheet -> áp dụng logic tự động
+            try:
+                sheet1 = spreadsheet.worksheet("Sheet1")
+                sheet1_data = sheet1.get_all_values()
+                if is_sheet_truly_empty(sheet1_data):
+                    target_worksheet = sheet1
+                    final_sheet_name = "Sheet1"
+                    progress(0.92, desc="Sheet1 trống, sẽ ghi dữ liệu vào đây.")
+                else:
+                    progress(0.92, desc="Sheet1 đã có dữ liệu, đang tạo sheet mới 'file_gia'...")
+                    # Tìm tên sheet mới không bị trùng
+                    new_sheet_base_name = "file_gia"
+                    new_sheet_name = new_sheet_base_name
+                    i = 1
+                    while True:
+                        try:
+                            spreadsheet.worksheet(new_sheet_name)
+                            new_sheet_name = f"{new_sheet_base_name}_{i}"
+                            i += 1
+                        except WorksheetNotFound:
+                            break
+                    final_sheet_name = new_sheet_name
+                    target_worksheet = spreadsheet.add_worksheet(title=final_sheet_name, rows="1", cols="20")
+            except WorksheetNotFound:
+                progress(0.92, desc="Không tìm thấy Sheet1, đang tạo mới...")
+                final_sheet_name = "Sheet1"
+                target_worksheet = spreadsheet.add_worksheet(title=final_sheet_name, rows="1", cols="20")
+        # === LOGIC MỚI KẾT THÚC ===
 
-        progress(0.95, desc="Đang nối dữ liệu vào sheet...")
+        progress(0.95, desc=f"Đang ghi dữ liệu vào sheet '{final_sheet_name}'...")
         time.sleep(1)
-        existing_data = worksheet.get_all_values()
+        
+        existing_data = target_worksheet.get_all_values()
         rows_to_append = df.values.tolist()
         
-        # === THAY ĐỔI LOGIC KIỂM TRA ĐỂ THÊM TIÊU ĐỀ CHÍNH XÁC HƠN ===
-        if is_new_sheet or is_sheet_truly_empty(existing_data):
+        if is_sheet_truly_empty(existing_data):
             header = df.columns.tolist()
-            worksheet.append_row(header, value_input_option='USER_ENTERED')
-            worksheet.append_rows(rows_to_append, value_input_option='USER_ENTERED')
+            target_worksheet.append_row(header, value_input_option='USER_ENTERED')
+            target_worksheet.append_rows(rows_to_append, value_input_option='USER_ENTERED')
             header_format = {"textFormat": {"bold": True}}
-            worksheet.format('A1:{}'.format(get_column_letter(len(df.columns)) + '1'), header_format)
-            return f"✅ Thành công! Đã tạo và ghi dữ liệu vào sheet '{sheet_name}'."
-        else:
-            worksheet.append_rows(rows_to_append, value_input_option='USER_ENTERED')
-            return f"✅ Thành công! Đã nối thêm {len(rows_to_append)} dòng mới vào sheet '{sheet_name}'."
+            target_worksheet.format('A1:{}'.format(get_column_letter(len(df.columns)) + '1'), header_format)
+            return f"✅ Thành công! Đã tạo và ghi dữ liệu vào sheet '{final_sheet_name}'."
+        else: # Trường hợp này chỉ xảy ra khi người dùng tự nhập tên sheet đã có dữ liệu
+            target_worksheet.append_rows(rows_to_append, value_input_option='USER_ENTERED')
+            return f"✅ Thành công! Đã nối thêm {len(rows_to_append)} dòng mới vào sheet '{final_sheet_name}'."
 
     except gspread.exceptions.SpreadsheetNotFound:
         return "❌ Lỗi: Không tìm thấy Google Sheet. Vui lòng kiểm tra lại đường link hoặc quyền chia sẻ."
     except Exception as e:
         return f"❌ Lỗi khi tải lên Google Sheets: {e}"
 
-# --- HÀM XỬ LÝ DỮ LIỆU CHÍNH ---
+# --- HÀM XỬ LÝ DỮ LIỆU CHÍNH (KHÔNG THAY ĐỔI) ---
 def process_data(shop_id_input, source_files, font_name, font_size, output_choice, gsheet_url, sheet_name, progress=gr.Progress()):
     progress(0, desc="Đang kiểm tra thông tin...")
     if not shop_id_input: return "❌ Lỗi: Vui lòng nhập Shop ID!", None
@@ -167,7 +196,7 @@ def process_data(shop_id_input, source_files, font_name, font_size, output_choic
         progress(1, desc="Hoàn thành!")
         return status_message, None
 
-# --- GIAO DIỆN GRADIO ---
+# --- GIAO DIỆN GRADIO (KHÔNG THAY ĐỔI) ---
 with gr.Blocks(theme=gr.themes.Soft(), title="Công cụ tạo file giá") as demo:
     gr.HTML("<h1 style='text-align: center; color: #107C41;'>Công cụ tạo file giá Shopee ✨</h1>")
     gr.Markdown("<p style='text-align: center;'>Nhập Shop ID và file dữ liệu nguồn để tạo file mẫu nhanh chóng.</p>")
@@ -185,7 +214,7 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Công cụ tạo file giá") as de
                 
                 with gr.Group(visible=False) as gsheet_group:
                     google_sheet_url_input = gr.Textbox(label="Đường link Google Sheet:", placeholder="Dán link Google Sheet của bạn vào đây...")
-                    sheet_name_input = gr.Textbox(label="Tên Sheet mong muốn:", placeholder="Mặc định: Sheet1")
+                    sheet_name_input = gr.Textbox(label="Tên Sheet mong muốn:", placeholder="Mặc định: Tự động", info="Để trống để tự động ghi vào Sheet1 (nếu trống) hoặc tạo sheet 'file_gia' (nếu Sheet1 đã có dữ liệu).")
 
             with gr.Group():
                 gr.Markdown("### 3. Tùy chọn định dạng (chỉ cho Excel)")
