@@ -215,8 +215,8 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Công cụ tạo file giá") as de
                 output_choice_radio = gr.Radio(label="Lưu kết quả ở đâu?", choices=["Tải xuống Excel", "Tải lên Google Sheet"], value="Tải xuống Excel")
                 
                 with gr.Group(visible=False) as gsheet_group:
-                    google_sheet_url_input = gr.Textbox(label="Đường link Google Sheet:", placeholder="Dán link Google Sheet của bạn vào đây...")
-                    sheet_name_input = gr.Textbox(label="Tên Sheet mong muốn:", placeholder="Mặc định: Tự động", info="Để trống để tự động ghi vào Sheet1 (nếu trống) hoặc tạo sheet 'file_gia' (nếu Sheet1 đã có dữ liệu).")
+                    google_sheet_url_input = gr.Textbox(label="Đường link Google Sheet:", placeholder="Dán link Google Sheet của bạn vào đây...", info="Hãy cấp quyền chỉnh sửa Sheet cho email: gradio-sheets-updater@hybrid-essence-462614-j2.iam.gserviceaccount.com")
+                    sheet_name_input = gr.Textbox(label="Tên Sheet mong muốn:", placeholder="Mặc định: Tự động", info="Có thể để trống hoặc điền tên sheet mong muốn.")
 
             with gr.Group():
                 gr.Markdown("### 3. Tùy chọn định dạng (chỉ cho Excel)")
