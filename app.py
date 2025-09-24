@@ -15,7 +15,15 @@ from gspread.exceptions import WorksheetNotFound
 from gspread_dataframe import set_with_dataframe
 from google.oauth2.service_account import Credentials
 
-# --- HÀM TẢI LÊN GOOGLE SHEET ---
+# --- HÀM KIỂM TRA SHEET TRỐNG THÔNG MINH HƠN ---
+def is_sheet_truly_empty(data):
+    """Kiểm tra xem sheet có thực sự trống không (kể cả các hàng trống)."""
+    if not data:  # Trường hợp sheet không có hàng nào
+        return True
+    # Kiểm tra xem tất cả các ô trong tất cả các hàng có trống không
+    return all(all(cell == '' for cell in row) for row in data)
+
+# --- HÀM TẢI LÊN GOOGLE SHEET ĐÃ SỬA LỖI ---
 def upload_to_google_sheet(df, sheet_url, sheet_name, progress):
     try:
         progress(0.9, desc="Đang kết nối tới Google Sheets...")
@@ -44,7 +52,8 @@ def upload_to_google_sheet(df, sheet_url, sheet_name, progress):
         existing_data = worksheet.get_all_values()
         rows_to_append = df.values.tolist()
         
-        if is_new_sheet or not existing_data:
+        # === THAY ĐỔI LOGIC KIỂM TRA ĐỂ THÊM TIÊU ĐỀ CHÍNH XÁC HƠN ===
+        if is_new_sheet or is_sheet_truly_empty(existing_data):
             header = df.columns.tolist()
             worksheet.append_row(header, value_input_option='USER_ENTERED')
             worksheet.append_rows(rows_to_append, value_input_option='USER_ENTERED')
@@ -123,24 +132,29 @@ def process_data(shop_id_input, source_files, font_name, font_size, output_choic
                 cell.fill = header_fill
                 cell.font = header_font
                 cell.alignment = header_alignment
+                
                 max_length = 0
                 column_letter = get_column_letter(col_idx)
-                is_name_col = "Tên" in str(cell.value)
-                is_link_col = "Link" in str(cell.value)
+                column_header = str(cell.value)
+
                 for cell_in_col in column_cell:
                     if cell_in_col.row > 1:
                         cell_in_col.font = data_font
                         cell_in_col.alignment = data_alignment
-                
                     try:
                         if len(str(cell_in_col.value)) > max_length:
                             max_length = len(str(cell_in_col.value))
                     except:
                         pass
-                if is_name_col: adjusted_width = 50
-                elif is_link_col: adjusted_width = 45
-                else: adjusted_width = (max_length + 2) * 1.2
-                worksheet.column_dimensions[column_letter].width = min(adjusted_width, 60)
+                
+                if column_header == "Tên sản phẩm":
+                    adjusted_width = 45
+                elif column_header == "Link":
+                    adjusted_width = 30
+                else:
+                    adjusted_width = (max_length + 2) * 1.2
+                
+                worksheet.column_dimensions[column_letter].width = adjusted_width
             
             worksheet.freeze_panes = 'A2'
             writer.close()
@@ -160,12 +174,12 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Công cụ tạo file giá") as de
 
     with gr.Row():
         with gr.Column(scale=2): # Cột trái cho Input
-            with gr.Group(): # Dùng gr.Group để tương thích rộng rãi
+            with gr.Group():
                 gr.Markdown("### 1. Thông tin bắt buộc")
                 shop_id_input = gr.Textbox(label="Shop ID Shopee:", placeholder="Nhập chính xác ID của Shop (chỉ gồm số)...")
                 file_input = gr.File(label="Tải lên file dữ liệu nguồn (.xlsx, .csv):", file_types=[".xlsx", ".xls", ".csv"], file_count="multiple")
             
-            with gr.Group(): # Dùng gr.Group để tương thích rộng rãi
+            with gr.Group():
                 gr.Markdown("### 2. Lựa chọn Output")
                 output_choice_radio = gr.Radio(label="Lưu kết quả ở đâu?", choices=["Tải xuống Excel", "Tải lên Google Sheet"], value="Tải xuống Excel")
                 
@@ -173,7 +187,7 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Công cụ tạo file giá") as de
                     google_sheet_url_input = gr.Textbox(label="Đường link Google Sheet:", placeholder="Dán link Google Sheet của bạn vào đây...")
                     sheet_name_input = gr.Textbox(label="Tên Sheet mong muốn:", placeholder="Mặc định: Sheet1")
 
-            with gr.Group(): # Dùng gr.Group để tương thích rộng rãi
+            with gr.Group():
                 gr.Markdown("### 3. Tùy chọn định dạng (chỉ cho Excel)")
                 with gr.Row():
                     font_name_dropdown = gr.Dropdown(choices=["Calibri", "Arial", "Times New Roman"], value="Calibri", label="Font chữ")
