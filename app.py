@@ -180,6 +180,8 @@ def process_data(shop_id_input, source_files, font_name, font_size, output_choic
                     adjusted_width = 45
                 elif column_header == "Link":
                     adjusted_width = 30
+                elif column_header == "Tên phân loại":
+                    adjusted_width = 20    
                 else:
                     adjusted_width = (max_length + 2) * 1.2
                 
