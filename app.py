@@ -15,7 +15,7 @@ from gspread.exceptions import WorksheetNotFound
 from gspread_dataframe import set_with_dataframe
 from google.oauth2.service_account import Credentials
 
-# --- HÀM TẢI LÊN GOOGLE SHEET (KHÔNG THAY ĐỔI) ---
+# --- HÀM TẢI LÊN GOOGLE SHEET ---
 def upload_to_google_sheet(df, sheet_url, sheet_name, progress):
     try:
         progress(0.9, desc="Đang kết nối tới Google Sheets...")
@@ -60,7 +60,7 @@ def upload_to_google_sheet(df, sheet_url, sheet_name, progress):
     except Exception as e:
         return f"❌ Lỗi khi tải lên Google Sheets: {e}"
 
-# --- HÀM XỬ LÝ DỮ LIỆU ĐÃ CẬP NHẬT ĐỊNH DẠNG EXCEL ---
+# --- HÀM XỬ LÝ DỮ LIỆU CHÍNH ---
 def process_data(shop_id_input, source_files, font_name, font_size, output_choice, gsheet_url, sheet_name, progress=gr.Progress()):
     progress(0, desc="Đang kiểm tra thông tin...")
     if not shop_id_input: return "❌ Lỗi: Vui lòng nhập Shop ID!", None
@@ -115,8 +115,7 @@ def process_data(shop_id_input, source_files, font_name, font_size, output_choic
             header_font = Font(name=font_name, size=font_size, bold=True, color="FFFFFF")
             header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
             
-            # === THAY ĐỔI ĐỊNH DẠNG EXCEL THEO YÊU CẦU ===
-            # 1. Tắt wrap_text cho các dòng dữ liệu để nội dung bị cắt bớt
+            # Định dạng Excel đã được tối ưu theo yêu cầu
             data_font = Font(name=font_name, size=font_size - 1)
             data_alignment = Alignment(vertical='center', wrap_text=False) 
             
@@ -133,7 +132,7 @@ def process_data(shop_id_input, source_files, font_name, font_size, output_choic
                     if cell_in_col.row > 1:
                         cell_in_col.font = data_font
                         cell_in_col.alignment = data_alignment
-                        # 2. Đã xóa bỏ phần tô màu xen kẽ
+                
                     try:
                         if len(str(cell_in_col.value)) > max_length:
                             max_length = len(str(cell_in_col.value))
@@ -143,7 +142,6 @@ def process_data(shop_id_input, source_files, font_name, font_size, output_choic
                 elif is_link_col: adjusted_width = 45
                 else: adjusted_width = (max_length + 2) * 1.2
                 worksheet.column_dimensions[column_letter].width = min(adjusted_width, 60)
-            # === KẾT THÚC THAY ĐỔI ===
             
             worksheet.freeze_panes = 'A2'
             writer.close()
@@ -156,19 +154,19 @@ def process_data(shop_id_input, source_files, font_name, font_size, output_choic
         progress(1, desc="Hoàn thành!")
         return status_message, None
 
-# --- GIAO DIỆN GRADIO ĐÃ THIẾT KẾ LẠI ---
+# --- GIAO DIỆN GRADIO ĐÃ SỬA LẠI CHO ỔN ĐỊNH VÀ ĐẸP HƠN ---
 with gr.Blocks(theme=gr.themes.Soft(), title="Công cụ tạo file giá") as demo:
     gr.HTML("<h1 style='text-align: center; color: #107C41;'>Công cụ tạo file giá Shopee ✨</h1>")
     gr.Markdown("<p style='text-align: center;'>Nhập Shop ID và file dữ liệu nguồn để tạo file mẫu nhanh chóng.</p>")
 
     with gr.Row():
         with gr.Column(scale=2): # Cột trái cho Input
-            with gr.Box():
+            with gr.Group(): # Thay thế gr.Box bằng gr.Group để tương thích
                 gr.Markdown("### 1. Thông tin bắt buộc")
                 shop_id_input = gr.Textbox(label="Shop ID Shopee:", placeholder="Nhập chính xác ID của Shop (chỉ gồm số)...")
                 file_input = gr.File(label="Tải lên file dữ liệu nguồn (.xlsx, .csv):", file_types=[".xlsx", ".xls", ".csv"], file_count="multiple")
             
-            with gr.Box():
+            with gr.Group(): # Thay thế gr.Box bằng gr.Group
                 gr.Markdown("### 2. Lựa chọn Output")
                 output_choice_radio = gr.Radio(label="Lưu kết quả ở đâu?", choices=["Tải xuống Excel", "Tải lên Google Sheet"], value="Tải xuống Excel")
                 
@@ -176,7 +174,7 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Công cụ tạo file giá") as de
                     google_sheet_url_input = gr.Textbox(label="Đường link Google Sheet:", placeholder="Dán link Google Sheet của bạn vào đây...")
                     sheet_name_input = gr.Textbox(label="Tên Sheet mong muốn:", placeholder="Mặc định: Sheet1")
 
-            with gr.Box():
+            with gr.Group(): # Thay thế gr.Box bằng gr.Group
                 gr.Markdown("### 3. Tùy chọn định dạng (chỉ cho Excel)")
                 with gr.Row():
                     font_name_dropdown = gr.Dropdown(choices=["Calibri", "Arial", "Times New Roman"], value="Calibri", label="Font chữ")
