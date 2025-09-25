@@ -88,17 +88,37 @@ def upload_to_google_sheet(df, sheet_url, sheet_name, progress):
             target_worksheet.append_rows(rows_to_append, value_input_option='USER_ENTERED')
             header_format = {"textFormat": {"bold": True}}
             target_worksheet.format('A1:{}'.format(get_column_letter(len(df.columns)) + '1'), header_format)
-            return f"✅ Thành công! Đã tạo và ghi dữ liệu vào sheet '{final_sheet_name}'."
+            message = f"✅ Thành công! Đã tạo và ghi dữ liệu vào sheet '{final_sheet_name}'."
         else: # Trường hợp này chỉ xảy ra khi người dùng tự nhập tên sheet đã có dữ liệu
             target_worksheet.append_rows(rows_to_append, value_input_option='USER_ENTERED')
-            return f"✅ Thành công! Đã nối thêm {len(rows_to_append)} dòng mới vào sheet '{final_sheet_name}'."
+            message = f"✅ Thành công! Đã nối thêm {len(rows_to_append)} dòng mới vào sheet '{final_sheet_name}'."
+
+        # MỚI: THÊM ĐỊNH DẠNG SỐ CHO CÁC CỘT GIÁ TRÊN GOOGLE SHEETS
+        progress(0.98, desc="Đang định dạng các cột số...")
+        number_format = {"numberFormat": {"type": "NUMBER", "pattern": "#,##0"}}
+        price_columns_to_format = ['Giá gốc', 'Giá đang bán', 'Giá FS', 'Giá campaign']
+        all_headers = df.columns.tolist()
+        
+        for col_name in price_columns_to_format:
+            try:
+                # +1 vì index của gspread bắt đầu từ 1
+                col_index = all_headers.index(col_name) + 1
+                col_letter = get_column_letter(col_index)
+                # Định dạng từ hàng 2 đến hết
+                format_range = f"{col_letter}2:{col_letter}"
+                target_worksheet.format(format_range, number_format)
+            except ValueError:
+                # Bỏ qua nếu cột không tồn tại trong dataframe
+                pass
+        
+        return message
 
     except gspread.exceptions.SpreadsheetNotFound:
         return "❌ Lỗi: Không tìm thấy Google Sheet. Vui lòng kiểm tra lại đường link hoặc quyền chia sẻ."
     except Exception as e:
         return f"❌ Lỗi khi tải lên Google Sheets: {e}"
 
-# --- HÀM XỬ LÝ DỮ LIỆU CHÍNH (KHÔNG THAY ĐỔI) ---
+# --- HÀM XỬ LÝ DỮ LIỆU CHÍNH (CÓ THAY ĐỔI) ---
 def process_data(shop_id_input, source_files, font_name, font_size, output_choice, gsheet_url, sheet_name, progress=gr.Progress()):
     progress(0, desc="Đang kiểm tra thông tin...")
     if not shop_id_input: return "❌ Lỗi: Vui lòng nhập Shop ID!", None
@@ -156,6 +176,10 @@ def process_data(shop_id_input, source_files, font_name, font_size, output_choic
             data_font = Font(name=font_name, size=font_size - 1)
             data_alignment = Alignment(vertical='center', wrap_text=False) 
             
+            # MỚI: KHAI BÁO CÁC CỘT GIÁ VÀ ĐỊNH DẠNG SỐ
+            price_cols_template = ['Giá gốc', 'Giá đang bán', 'Giá FS', 'Giá campaign']
+            number_format_str = '#,##0'
+            
             for col_idx, column_cell in enumerate(worksheet.columns, 1):
                 cell = worksheet.cell(row=1, column=col_idx)
                 cell.fill = header_fill
@@ -170,6 +194,9 @@ def process_data(shop_id_input, source_files, font_name, font_size, output_choic
                     if cell_in_col.row > 1:
                         cell_in_col.font = data_font
                         cell_in_col.alignment = data_alignment
+                        # MỚI: ÁP DỤNG ĐỊNH DẠNG SỐ CHO CÁC CỘT GIÁ
+                        if column_header in price_cols_template:
+                            cell_in_col.number_format = number_format_str
                     try:
                         if len(str(cell_in_col.value)) > max_length:
                             max_length = len(str(cell_in_col.value))
@@ -181,7 +208,7 @@ def process_data(shop_id_input, source_files, font_name, font_size, output_choic
                 elif column_header == "Link":
                     adjusted_width = 30
                 elif column_header == "Tên phân loại":
-                    adjusted_width = 20    
+                    adjusted_width = 20   
                 else:
                     adjusted_width = (max_length + 2) * 1.2
                 
@@ -194,6 +221,12 @@ def process_data(shop_id_input, source_files, font_name, font_size, output_choic
         except Exception as e: return f"❌ Lỗi khi lưu file Excel: {e}", None
             
     elif output_choice == "Tải lên Google Sheet":
+        # MỚI: CHUYỂN CÁC CỘT GIÁ TRỐNG SANG DẠNG SỐ (0) ĐỂ ĐỊNH DẠNG ĐÚNG
+        price_cols_template = ['Giá FS', 'Giá campaign']
+        for col in price_cols_template:
+            if col in final_df.columns:
+                final_df[col] = pd.to_numeric(final_df[col], errors='coerce').fillna(0)
+
         status_message = upload_to_google_sheet(final_df, gsheet_url, sheet_name, progress)
         progress(1, desc="Hoàn thành!")
         return status_message, None
